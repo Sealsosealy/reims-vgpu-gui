@@ -4,8 +4,8 @@ use std::process::{Child, Command, Stdio};
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-        .with_inner_size([850.0, 700.0])
-        .with_min_inner_size([900.0, 650.0])
+        .with_inner_size([700.0, 500.0])
+        .with_min_inner_size([600.0, 450.0])
         .with_transparent(true),
         ..Default::default()
     };
@@ -130,7 +130,7 @@ impl eframe::App for ReimsVgpuApp {
         );
 
         ctx.set_visuals(visuals);
-        ctx.set_pixels_per_point(1.15);
+        ctx.set_pixels_per_point(1.0);
 
         self.update_download(ctx);
         self.update_installer(ctx);
