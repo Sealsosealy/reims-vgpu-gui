@@ -2,7 +2,7 @@
 
 A simple GUI for setting up and running [reims-vGPU](https://github.com/steelbrain/reims-vgpu) on Linux.
 
-[reims-vGPU GUI](docs/picture/screenshot.png)
+![reims-vGPU GUI](docs/picture/screenshot.png)
 
 ## Download
 
