@@ -26,7 +26,7 @@ Run:
 cargo run
 ```
 
-Credit
+## Credit
 * [Anees Iqbal (Steelbrain)](https://github.com/steelbrain) - The creator of reims-vgpu project
 * [Dhiru Kholia](https://github.com/kholia/osx-kvm) - Owner of OS X KVM project
 
