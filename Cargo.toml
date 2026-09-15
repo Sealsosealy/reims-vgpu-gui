@@ -1,0 +1,8 @@
+[package]
+name = "reims-vgpu-gui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.28"
+image = "0.25"
