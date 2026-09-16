@@ -6,6 +6,7 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default()
         .with_inner_size([700.0, 500.0])
         .with_min_inner_size([600.0, 450.0])
+        .with_max_inner_size([1200.0, 900.0])
         .with_transparent(true),
         ..Default::default()
     };
@@ -370,8 +371,7 @@ impl ReimsVgpuApp {
         if self.repo_process.is_some() {
             ui.label("Downloading reims-vGPU...");
         } else {
-            let repo_exists = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../reims-vgpu")
+            let repo_exists = download_root().join("reims-vgpu")
                 .exists();
 
             if repo_exists {
@@ -388,9 +388,9 @@ impl ReimsVgpuApp {
         if self.repo_process.is_some() {
             ui.label("Downloading...");
         } else {
-            let repo_exists = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../reims-vgpu")
-                .exists();
+            let repo_exists = download_root()
+            .join("reims-vgpu")
+            .exists();
 
             if repo_exists {
                 ui.label("Installed");
@@ -519,8 +519,22 @@ impl ReimsVgpuApp {
 
             ui.add_space(15.0);
 
+            let recovery_path = macos_download_path(&self.macOS_version);
+            let recovery_exists = recovery_path.exists();
+
             if self.download_process.is_some() {
                 ui.label("Downloading macOS...");
+            } else if recovery_exists {
+                ui.label(
+                    format!(
+                        "{} recovery image is already downloaded.",
+                        self.macOS_version
+                    )
+                );
+
+                if glass_action_button(ui, "Download Again").clicked() {
+                    self.download_macos();
+                }
             } else if glass_action_button(ui, "Download macOS Installer").clicked() {
                 self.download_macos();
             }
@@ -543,12 +557,14 @@ impl ReimsVgpuApp {
 
             if self.installer_process.is_some() {
                 ui.label("macOS installer is running...");
-            } else if self.disk_created {
+            } else if recovery_exists {
                 if glass_action_button(ui, "Run macOS Installer").clicked() {
                     self.run_macos_installer();
                 }
             } else {
-                ui.add_enabled(false, egui::Button::new("Run macOS Installer"));
+                ui.label(
+                    "Download the selected macOS recovery image before running the installer."
+                );
             }
 
             ui.add_space(10.0);
@@ -873,16 +889,7 @@ impl ReimsVgpuApp {
             return;
         }
 
-        let home = match std::env::var_os("HOME") {
-            Some(home) => std::path::PathBuf::from(home),
-            None => {
-                self.download_status =
-                "Could not determine home directory.".to_string();
-                return;
-            }
-        };
-
-        let osx_kvm = home.join("OSX-KVM");
+        let osx_kvm = download_root().join("OSX-KVM");
         let fetch_macos = osx_kvm.join("fetch-macOS-v2.py");
 
         if !fetch_macos.exists() {
@@ -935,11 +942,8 @@ impl ReimsVgpuApp {
             }
         };
 
-        let output_dir = home
-        .join(".local")
-        .join("share")
-        .join("reims-vgpu")
-        .join("downloads")
+        let output_dir = download_root()
+        .join("macos")
         .join(&self.macOS_version);
 
         if let Err(error) = std::fs::create_dir_all(&output_dir) {
@@ -1017,7 +1021,7 @@ impl ReimsVgpuApp {
             }
         };
 
-        let osx_kvm = home.join("OSX-KVM");
+        let osx_kvm = download_root().join("OSX-KVM");
         let disk_path = osx_kvm.join("mac_hdd_ng.img");
 
         if let Err(error) = std::fs::create_dir_all(&osx_kvm) {
@@ -1103,13 +1107,10 @@ impl ReimsVgpuApp {
             }
         };
 
-        let osx_kvm = home.join("OSX-KVM");
+        let osx_kvm = download_root().join("OSX-KVM");
 
-        let recovery_dir = home
-        .join(".local")
-        .join("share")
-        .join("reims-vgpu")
-        .join("downloads")
+        let recovery_dir = download_root()
+        .join("macos")
         .join(&self.macOS_version);
 
         let downloaded_dmg = recovery_dir.join("BaseSystem.dmg");
@@ -1230,12 +1231,12 @@ impl ReimsVgpuApp {
             }
         };
 
-        let osx_kvm = home.join("OSX-KVM");
+        let osx_kvm = download_root().join("OSX-KVM");
 
         let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
             std::path::PathBuf::from(path)
         } else {
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../reims-vgpu")
+            download_root().join("reims-vgpu")
         };
 
         let mac_hdd = osx_kvm.join("mac_hdd_ng.img");
@@ -1338,12 +1339,12 @@ impl ReimsVgpuApp {
                     }
                 };
 
-                let osx_kvm = home.join("OSX-KVM");
+                let osx_kvm = download_root().join("OSX-KVM");
 
                 let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
                     std::path::PathBuf::from(path)
                 } else {
-                    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../reims-vgpu")
+                    download_root().join("reims-vgpu")
                 };
 
                 let rail = match self.macOS_version.as_str() {
@@ -1480,26 +1481,28 @@ impl ReimsVgpuApp {
     }
 
     fn update_download(&mut self, ctx: &egui::Context) {
-        let log_path = self.download_log_path.clone();
+        // Only inspect the downloader log while the downloader
+        // process is actually running.
+        if self.download_process.is_some() {
+            if let Some(path) = &self.download_log_path {
+                if let Ok(contents) = std::fs::read_to_string(path) {
+                    for line in contents.lines() {
+                        let line = line.trim();
 
-        if let Some(path) = &log_path {
-            if let Ok(contents) = std::fs::read_to_string(path) {
-                for line in contents.lines() {
-                    let line = line.trim();
+                        if let Some(product) = line.strip_prefix("Downloading ") {
+                            let product = product
+                            .trim()
+                            .trim_end_matches('.');
 
-                    if let Some(product) = line.strip_prefix("Downloading ") {
-                        let product = product
-                        .trim()
-                        .trim_end_matches('.');
+                            if !product.is_empty() {
+                                self.download_product = product.to_string();
 
-                        if !product.is_empty() {
-                            self.download_product = product.to_string();
-
-                            self.download_status = format!(
-                                "Downloading {} — Apple recovery {}...",
-                                self.macOS_version,
-                                self.download_product
-                            );
+                                self.download_status = format!(
+                                    "Downloading {} — Apple recovery {}...",
+                                    self.macOS_version,
+                                    self.download_product
+                                );
+                            }
                         }
                     }
                 }
@@ -1577,7 +1580,7 @@ impl ReimsVgpuApp {
             return;
         }
 
-        let repo_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../reims-vgpu");
+        let repo_path = download_root().join("reims-vgpu");
 
         if repo_path.exists() {
             self.repo_status = format!("Repository already exists: {}", repo_path.display());
@@ -1622,96 +1625,74 @@ impl ReimsVgpuApp {
             return;
         }
 
-        let home = match std::env::var_os("HOME") {
-            Some(home) => std::path::PathBuf::from(home),
-            None => {
-                self.osx_kvm_status = "Could not determine home directory.".to_string();
-                return;
-            }
-        };
+        let root = download_root();
 
-        let osx_kvm = home.join("OSX-KVM");
+        if let Err(error) = std::fs::create_dir_all(&root) {
+            self.osx_kvm_status = format!(
+                "Could not create download directory: {}",
+                error
+            );
+            return;
+        }
 
-        // The directory may already exist because we created the virtual disk.
-        // Only consider OSX-KVM installed when the repository files are actually there.
-        let repo_exists = osx_kvm.join(".git").exists() && osx_kvm.join("OpenCore").exists();
+        let osx_kvm = root.join("OSX-KVM");
+
+        let repo_exists =
+        osx_kvm.join(".git").exists() &&
+        osx_kvm.join("OpenCore").exists();
 
         if repo_exists {
-            self.osx_kvm_status = format!("OSX-KVM is already installed: {}", osx_kvm.display());
+            self.osx_kvm_status =
+            "OSX-KVM is already installed.".to_string();
             return;
         }
 
-        self.osx_kvm_status = "Downloading OSX-KVM repository...".to_string();
+        self.osx_kvm_status =
+        "Downloading OSX-KVM repository...".to_string();
 
-        // If the directory exists but isn't a repository, remove the incomplete
-        // directory contents while preserving the directory itself.
         if osx_kvm.exists() {
-            match std::fs::read_dir(&osx_kvm) {
-                Ok(entries) => {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-
-                        let result = if path.is_dir() {
-                            std::fs::remove_dir_all(&path)
-                        } else {
-                            std::fs::remove_file(&path)
-                        };
-
-                        if let Err(error) = result {
-                            self.osx_kvm_status =
-                                format!("Could not clean incomplete OSX-KVM directory: {}", error);
-                            return;
-                        }
-                    }
-                }
-
-                Err(error) => {
-                    self.osx_kvm_status = format!("Could not inspect OSX-KVM directory: {}", error);
-                    return;
-                }
-            }
-        } else if let Err(error) = std::fs::create_dir_all(&osx_kvm) {
-            self.osx_kvm_status = format!("Could not create OSX-KVM directory: {}", error);
-            return;
-        }
-
-        let parent = match osx_kvm.parent() {
-            Some(parent) => parent,
-            None => {
-                self.osx_kvm_status = "Could not determine OSX-KVM parent directory.".to_string();
+            if let Err(error) = std::fs::remove_dir_all(&osx_kvm) {
+                self.osx_kvm_status = format!(
+                    "Could not remove incomplete OSX-KVM directory: {}",
+                    error
+                );
                 return;
             }
-        };
+        }
 
-        // git clone needs the destination to not already exist, so we clone
-        // into a temporary name and rename it when complete.
-        let temp_path = parent.join("OSX-KVM-clone");
+        let temp_path = root.join("OSX-KVM-clone");
 
         if temp_path.exists() {
-            let _ = std::fs::remove_dir_all(&temp_path);
+            if let Err(error) = std::fs::remove_dir_all(&temp_path) {
+                self.osx_kvm_status = format!(
+                    "Could not remove old OSX-KVM clone: {}",
+                    error
+                );
+                return;
+            }
         }
 
         match Command::new("git")
-            .arg("clone")
-            .arg("--depth")
-            .arg("1")
-            .arg("--recursive")
-            .arg("https://github.com/kholia/OSX-KVM.git")
-            .arg(&temp_path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
+        .arg("clone")
+        .arg("--depth")
+        .arg("1")
+        .arg("--recursive")
+        .arg("https://github.com/kholia/OSX-KVM.git")
+        .arg(&temp_path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
         {
             Ok(process) => {
                 self.osx_kvm_process = Some(process);
             }
 
             Err(error) => {
-                self.osx_kvm_status = format!("Could not start git: {}", error);
+                self.osx_kvm_status =
+                format!("Could not start git: {}", error);
             }
         }
     }
-
     fn update_osx_kvm(&mut self, ctx: &egui::Context) {
         let Some(process) = &mut self.osx_kvm_process else {
             return;
@@ -1734,8 +1715,8 @@ impl ReimsVgpuApp {
                     }
                 };
 
-                let osx_kvm = home.join("OSX-KVM");
-                let temp_path = home.join("OSX-KVM-clone");
+                let osx_kvm = download_root().join("OSX-KVM");
+                let temp_path = download_root().join("OSX-KVM-clone");
 
                 if !temp_path.join(".git").exists() {
                     self.osx_kvm_status =
@@ -1789,7 +1770,7 @@ impl ReimsVgpuApp {
             return;
         }
 
-        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../reims-vgpu");
+        let repo = download_root().join("reims-vgpu");
 
         let script = repo.join("scripts/qemu-build/qemu-build.sh");
 
@@ -1836,7 +1817,7 @@ impl ReimsVgpuApp {
 
                 if status.success() {
                     let repo =
-                        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../reims-vgpu");
+                        download_root().join("reims-vgpu");
 
                     let qemu = repo.join("vendor/qemu/build/qemu-system-x86_64");
 
@@ -1869,8 +1850,7 @@ impl ReimsVgpuApp {
         let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
             std::path::PathBuf::from(path)
         } else {
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../reims-vgpu")
+            download_root().join("reims-vgpu")
         };
 
         let boot_script = repo.join("vm/boot-x86.sh");
@@ -2062,8 +2042,7 @@ impl ReimsVgpuApp {
         let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
             std::path::PathBuf::from(path)
         } else {
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../reims-vgpu")
+            download_root().join("reims-vgpu")
         };
 
         let rails_dir = repo.join("vm/disks/rails");
@@ -2155,4 +2134,18 @@ fn glass_action_button(
         ))
         .stroke(egui::Stroke::NONE),
     )
+}
+
+fn download_root() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+    .map(std::path::PathBuf::from)
+    .unwrap_or_else(|| std::path::PathBuf::from("."))
+    .join("reims-gui-download")
+}
+
+fn macos_download_path(version: &str) -> std::path::PathBuf {
+    download_root()
+    .join("macos")
+    .join(version)
+    .join("BaseSystem.dmg")
 }
