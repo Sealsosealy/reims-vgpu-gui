@@ -2,7 +2,11 @@ use eframe::egui;
 use std::process::{Command, Stdio};
 
 use crate::app::ReimsVgpuApp;
-use crate::paths::{download_root, macos_download_path};
+use crate::paths::{
+    download_root,
+    macos_download_path,
+    osx_kvm_path,
+};
 
 // Function to download macos recovery
 impl ReimsVgpuApp {
@@ -12,12 +16,17 @@ impl ReimsVgpuApp {
             return;
         }
 
-        let osx_kvm = download_root().join("OSX-KVM");
+        let osx_kvm = osx_kvm_path();
         let fetch_macos = osx_kvm.join("fetch-macOS-v2.py");
 
         if !fetch_macos.exists() {
             self.download_status =
             format!("fetch-macOS-v2.py not found: {}", fetch_macos.display());
+            return;
+        }
+
+        if let Err(error) = Self::patch_fetch_macos(&fetch_macos) {
+            self.download_status = error;
             return;
         }
 
@@ -214,7 +223,7 @@ impl ReimsVgpuApp {
             }
         };
 
-        let osx_kvm = download_root().join("OSX-KVM");
+        let osx_kvm = osx_kvm_path();
         let disk_path = osx_kvm.join("mac_hdd_ng.img");
 
         if let Err(error) = std::fs::create_dir_all(&osx_kvm) {
@@ -273,7 +282,7 @@ impl ReimsVgpuApp {
             }
         };
 
-        let osx_kvm = download_root().join("OSX-KVM");
+        let osx_kvm = osx_kvm_path();
 
         let recovery_dir = download_root()
         .join("macos")
@@ -515,7 +524,7 @@ impl ReimsVgpuApp {
                     }
                 };
 
-                let osx_kvm = download_root().join("OSX-KVM");
+                let osx_kvm = osx_kvm_path();
                 let temp_path = download_root().join("OSX-KVM-clone");
 
                 if !temp_path.join(".git").exists() {
@@ -552,6 +561,16 @@ impl ReimsVgpuApp {
                     return;
                 }
 
+                let fetch_macos = osx_kvm.join("fetch-macOS-v2.py");
+
+                if let Err(error) = Self::patch_fetch_macos(&fetch_macos) {
+                    self.osx_kvm_status = format!(
+                        "OSX-KVM downloaded, but the recovery downloader could not be patched: {}",
+                        error
+                    );
+                    return;
+                }
+
                 self.osx_kvm_status = "OSX-KVM downloaded successfully.".to_string();
             }
 
@@ -581,7 +600,7 @@ impl ReimsVgpuApp {
             }
         };
 
-        let osx_kvm = download_root().join("OSX-KVM");
+        let osx_kvm = osx_kvm_path();
 
         let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
             std::path::PathBuf::from(path)
@@ -691,7 +710,7 @@ impl ReimsVgpuApp {
                     }
                 };
 
-                let osx_kvm = download_root().join("OSX-KVM");
+                let osx_kvm = osx_kvm_path();
 
                 let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
                     std::path::PathBuf::from(path)
@@ -830,6 +849,25 @@ impl ReimsVgpuApp {
                 self.import_process = None;
             }
         }
+    }
+
+    fn patch_fetch_macos(script: &std::path::Path) -> Result<(), String> {
+        let contents = std::fs::read_to_string(script)
+        .map_err(|error| format!("Could not read fetch-macOS-v2.py: {}", error))?;
+
+        let old = "            terminalsize = max(os.get_terminal_size().columns - TERMINAL_MARGIN, 0)";
+        let new = "            terminalsize = 80";
+
+        let patched = contents.replace(old, new);
+
+        if patched == contents {
+            return Ok(());
+        }
+
+        std::fs::write(script, patched)
+        .map_err(|error| format!("Could not patch fetch-macOS-v2.py: {}", error))?;
+
+        Ok(())
     }
 }
 

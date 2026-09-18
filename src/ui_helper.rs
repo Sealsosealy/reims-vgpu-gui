@@ -1,7 +1,14 @@
 use eframe::egui;
 
 use crate::app::{Page, ReimsVgpuApp};
-use crate::paths::{download_root, macos_download_path};
+
+use crate::paths::{
+    download_root,
+    macos_download_path,
+    osx_kvm_installed,
+    reims_vgpu_installed,
+};
+
 
 // glass box frame
 
@@ -214,8 +221,7 @@ impl ReimsVgpuApp {
             if self.repo_process.is_some() {
                 ui.label("Downloading reims-vGPU...");
             } else {
-                let repo_exists = download_root().join("reims-vgpu")
-                .exists();
+                let repo_exists = reims_vgpu_installed();
 
                 if repo_exists {
                     ui.label("reims-vGPU repository is installed.");
@@ -231,9 +237,7 @@ impl ReimsVgpuApp {
             if self.repo_process.is_some() {
                 ui.label("Downloading...");
             } else {
-                let repo_exists = download_root()
-                .join("reims-vgpu")
-                .exists();
+                let repo_exists = reims_vgpu_installed();
 
                 if repo_exists {
                     ui.label("Installed");
@@ -315,10 +319,7 @@ impl ReimsVgpuApp {
 
             ui.add_space(15.0);
 
-            let osx_kvm_exists = std::env::var_os("HOME")
-            .map(std::path::PathBuf::from)
-            .map(|home| home.join("OSX-KVM").exists())
-            .unwrap_or(false);
+            let osx_kvm_exists = osx_kvm_installed();
 
             if self.osx_kvm_process.is_some() {
                 ui.label("Downloading OSX-KVM...");
@@ -373,7 +374,8 @@ impl ReimsVgpuApp {
             ui.add_space(15.0);
 
             let recovery_path = macos_download_path(&self.macOS_version);
-            let recovery_exists = recovery_path.exists();
+            let recovery_dmg = recovery_path.join("BaseSystem.dmg");
+            let recovery_exists = recovery_dmg.is_file();
 
             if self.download_process.is_some() {
                 ui.label("Downloading macOS...");
@@ -440,10 +442,10 @@ impl ReimsVgpuApp {
             if self.import_process.is_some() {
                 ui.label("Importing macOS guest...");
             } else {
-                let ready = std::env::var_os("HOME")
-                .map(std::path::PathBuf::from)
-                .map(|home| home.join("OSX-KVM").join("mac_hdd_ng.img").exists())
-                .unwrap_or(false);
+                let ready = download_root()
+                .join("OSX-KVM")
+                .join("mac_hdd_ng.img")
+                .exists();
 
                 if ready {
                     if glass_action_button(ui, "Import macOS to reims-vGPU").clicked() {

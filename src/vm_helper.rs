@@ -2,7 +2,10 @@ use eframe::egui;
 use std::process::{Command, Stdio};
 
 use crate::app::ReimsVgpuApp;
-use crate::paths::download_root;
+use crate::paths::{
+    download_root,
+    reims_vgpu_path,
+};
 
 impl ReimsVgpuApp {
     pub(crate) fn launch_vm(&mut self) {
@@ -10,11 +13,7 @@ impl ReimsVgpuApp {
             return;
         }
 
-        let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
-            std::path::PathBuf::from(path)
-        } else {
-            download_root().join("reims-vgpu")
-        };
+        let repo = reims_vgpu_path();
 
         let boot_script = repo.join("vm/boot-x86.sh");
 
@@ -149,11 +148,7 @@ impl ReimsVgpuApp {
     // get installed rail to show in vm launch
 
     pub(crate) fn get_installed_rails(&self) -> Vec<(String, String)> {
-        let repo = if let Ok(path) = std::env::var("REIMS_VGPU_REPO") {
-            std::path::PathBuf::from(path)
-        } else {
-            download_root().join("reims-vgpu")
-        };
+        let repo = reims_vgpu_path();
 
         let rails_dir = repo.join("vm/disks/rails");
 
