@@ -2,6 +2,7 @@ mod app;
 mod macos_helper;
 mod paths;
 mod system_check;
+mod setup_helper;
 mod ui_helper;
 mod vm_helper;
 
