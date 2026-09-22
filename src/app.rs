@@ -11,6 +11,7 @@ pub(crate) enum Page {
     Build,
     VirtualMachine,
     Logs,
+    Updates,
 }
 
 pub(crate) struct ReimsVgpuApp {
@@ -51,6 +52,31 @@ pub(crate) struct ReimsVgpuApp {
 
     pub(crate) download_product: String,
     pub(crate) download_log_path: Option<std::path::PathBuf>,
+
+    pub(crate) dependency_checks: Vec<DependencyCheck>,
+    pub(crate) dependencies_checked: bool,
+    pub(crate) dependencies_status: String,
+    pub(crate) dependency_install_process: Option<Child>,
+
+    pub(crate) gui_latest_version: String,
+    pub(crate) gui_update_status: String,
+    pub(crate) gui_update_available: bool,
+    pub(crate) gui_update_check_process: Option<Child>,
+    pub(crate) gui_update_process: Option<Child>,
+
+    pub(crate) reims_local_commit: String,
+    pub(crate) reims_remote_commit: String,
+    pub(crate) reims_update_status: String,
+    pub(crate) reims_update_available: bool,
+    pub(crate) reims_update_check_process: Option<Child>,
+    pub(crate) reims_update_process: Option<Child>,
+}
+
+pub(crate) struct DependencyCheck {
+    pub(crate) name: String,
+    pub(crate) command: String,
+    pub(crate) installed: bool,
+    pub(crate) details: String,
 }
 
 pub(crate) struct SystemCheck {
@@ -99,6 +125,24 @@ impl Default for ReimsVgpuApp {
 
             logo_texture: None,
             wallpaper_texture: None,
+
+            dependency_checks: Vec::new(),
+            dependencies_checked: false,
+            dependencies_status: "Not checked".to_string(),
+            dependency_install_process: None,
+
+            gui_latest_version: String::new(),
+            gui_update_status: "Not checked".to_string(),
+            gui_update_available: false,
+            gui_update_check_process: None,
+            gui_update_process: None,
+
+            reims_local_commit: String::new(),
+            reims_remote_commit: String::new(),
+            reims_update_status: "Not checked".to_string(),
+            reims_update_available: false,
+            reims_update_check_process: None,
+            reims_update_process: None,
         }
     }
 }
@@ -124,6 +168,11 @@ impl eframe::App for ReimsVgpuApp {
         self.update_import(ctx);
         self.update_build(ctx);
         self.update_vm(ctx);
+        self.update_dependency_install(ctx);
+        self.update_gui_check(ctx);
+        self.update_reims_check(ctx);
+        self.update_gui_install(ctx);
+        self.update_reims_install(ctx);
 
         //draw wallpaper behind everything
         if let Some(texture) = &self.wallpaper_texture {
