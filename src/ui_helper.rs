@@ -214,6 +214,47 @@ impl ReimsVgpuApp {
 
         ui.add_space(30.0);
         glass_frame().show(ui, |ui| {
+            ui.heading("Build Dependencies");
+
+            ui.add_space(10.0);
+
+            ui.label("Check and install the tools required to build reims-vGPU.");
+            ui.add_space(15.0);
+
+            if !self.dependencies_checked {
+                if glass_action_button(ui, "Check Dependencies").clicked() {
+                    self.check_dependencies();
+                }
+            } else {
+                for dependency in &self.dependency_checks {
+                    ui.horizontal(|ui| {
+                        ui.label(if dependency.installed { "✓" } else { "✗" });
+                        ui.label(&dependency.name);
+                        ui.label(&dependency.details);
+                    });
+                }
+
+                ui.add_space(10.0);
+
+                if self.dependency_install_process.is_some() {
+                    ui.label("Installing missing dependencies...");
+                } else if self.dependency_checks.iter().any(|dependency| !dependency.installed) {
+                    if glass_action_button(ui, "Install Missing Tools").clicked() {
+                        self.install_missing_dependencies();
+                    }
+                }
+
+                if glass_action_button(ui, "Check Again").clicked() {
+                    self.check_dependencies();
+                }
+            }
+
+            ui.add_space(10.0);
+            ui.label(&self.dependencies_status);
+        });
+
+        ui.add_space(30.0);
+        glass_frame().show(ui, |ui| {
             ui.heading("reims-vGPU Repository");
 
             ui.add_space(10.0);
