@@ -286,6 +286,7 @@ impl eframe::App for ReimsVgpuApp {
                   Page::Build => self.show_build(ui),
                   Page::VirtualMachine => self.show_vm(ui),
                   Page::Logs => self.show_logs(ui),
+                  Page::Updates => self.show_updates(ui),
                 }
             });
         });
