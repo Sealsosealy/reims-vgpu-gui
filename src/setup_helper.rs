@@ -165,13 +165,13 @@ fn packages_for(package_manager: &str, command: &str) -> Option<Vec<&'static str
 
 fn package_manager_command(package_manager: &str) -> Option<(&'static str, &'static [&'static str])> {
     match package_manager {
-        "pacman" => Some(("pacman", &["-S", "--needed"])),
+        "pacman" => Some(("pacman", &["-S", "--needed", "--noconfirm"])),
         "apt" => Some(("apt-get", &["install", "-y"])),
         "dnf" => Some(("dnf", &["install", "-y"])),
-        "zypper" => Some(("zypper", &["install", "-y"])),
+        "zypper" => Some(("zypper", &["--non-interactive", "install", "-y"])),
         "apk" => Some(("apk", &["add"])),
         "xbps" => Some(("xbps-install", &["-y"])),
-        "emerge" => Some(("emerge", &[])),
+        "emerge" => Some(("emerge", &["--ask=n"])),
         _ => None,
     }
 }
@@ -280,7 +280,7 @@ impl ReimsVgpuApp {
             if command_exists("pkexec") {
                 ("pkexec", Vec::new())
             } else if command_exists("sudo") {
-                ("sudo", Vec::new())
+                ("sudo", vec!["-n"])
             } else {
                 self.dependencies_status =
                     "Neither pkexec nor sudo is available. Install the tools manually."
