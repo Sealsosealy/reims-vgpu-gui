@@ -236,6 +236,7 @@ impl eframe::App for ReimsVgpuApp {
               (Page::Build, "Build"),
               (Page::VirtualMachine, "Virtual Machine"),
               (Page::Logs, "Logs"),
+              (Page::Updates, "Updates"),
             ];
 
             for (page, label) in nav_items {
