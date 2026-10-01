@@ -58,7 +58,6 @@ pub(crate) struct ReimsVgpuApp {
     pub(crate) dependencies_status: String,
     pub(crate) dependency_install_process: Option<Child>,
     pub(crate) package_manager: String,
-    pub(crate) dependency_install_confirm: bool,
 
     pub(crate) gui_latest_version: String,
     pub(crate) gui_update_status: String,
@@ -133,7 +132,6 @@ impl Default for ReimsVgpuApp {
             dependencies_status: "Not checked".to_string(),
             dependency_install_process: None,
             package_manager: "Select package manager".to_string(),
-            dependency_install_confirm: false,
 
             gui_latest_version: String::new(),
             gui_update_status: "Not checked".to_string(),
