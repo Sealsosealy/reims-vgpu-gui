@@ -52,19 +52,6 @@ fn command_exists(command: &str) -> bool {
         .map(|status| status.success())
         .unwrap_or(false)
 }
-
-fn package_manager_options() -> [&'static str; 7] {
-    [
-        "pacman",
-        "apt",
-        "dnf",
-        "zypper",
-        "apk",
-        "xbps",
-        "emerge",
-    ]
-}
-
 fn packages_for(package_manager: &str, command: &str) -> Option<Vec<&'static str>> {
     match package_manager {
         "pacman" => match command {
@@ -184,7 +171,7 @@ fn package_manager_command(package_manager: &str) -> Option<(&'static str, &'sta
         "zypper" => Some(("zypper", &["install", "-y"])),
         "apk" => Some(("apk", &["add"])),
         "xbps" => Some(("xbps-install", &["-y"])),
-        "emerge" => Some(("emerge",)),
+        "emerge" => Some(("emerge", &[])),
         _ => None,
     }
 }
