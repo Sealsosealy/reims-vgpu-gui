@@ -273,7 +273,7 @@ impl ReimsVgpuApp {
                 } else if self.package_manager != "Select package manager"
                     && self.dependency_checks.iter().any(|dependency| !dependency.installed) {
                     if glass_action_button(ui, "Install Missing Tools").clicked() {
-                        self.install_missing_dependencies();
+                        self.dependency_install_confirm = true;
                     }
                 }
 
@@ -285,6 +285,31 @@ impl ReimsVgpuApp {
             ui.add_space(10.0);
             ui.label(&self.dependencies_status);
         });
+
+        if self.dependency_install_confirm {
+            egui::Window::new("Install missing dependencies?")
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.label(format!(
+                        "Install the missing tools using {}?",
+                        self.package_manager
+                    ));
+
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        if glass_action_button(ui, "Yes, install").clicked() {
+                            self.dependency_install_confirm = false;
+                            self.install_missing_dependencies();
+                        }
+
+                        if glass_action_button(ui, "No").clicked() {
+                            self.dependency_install_confirm = false;
+                        }
+                    });
+                });
+        }
 
         ui.add_space(30.0);
         glass_frame().show(ui, |ui| {
