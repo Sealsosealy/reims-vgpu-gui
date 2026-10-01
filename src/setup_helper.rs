@@ -53,18 +53,21 @@ fn command_exists(command: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn distro_id() -> Option<String> {
-    let contents = std::fs::read_to_string("/etc/os-release").ok()?;
-
-    contents.lines().find_map(|line| {
-        let value = line.strip_prefix("ID=")?;
-        Some(value.trim_matches('"').to_ascii_lowercase())
-    })
+fn package_manager_options() -> [&'static str; 7] {
+    [
+        "pacman",
+        "apt",
+        "dnf",
+        "zypper",
+        "apk",
+        "xbps",
+        "emerge",
+    ]
 }
 
-fn package_for(distro: &str, command: &str) -> Option<Vec<&'static str>> {
-    match distro {
-        "arch" | "manjaro" => match command {
+fn packages_for(package_manager: &str, command: &str) -> Option<Vec<&'static str>> {
+    match package_manager {
+        "pacman" => match command {
             "git" => Some(vec!["git"]),
             "cargo" => Some(vec!["rust"]),
             "qemu-system-x86_64" => Some(vec!["qemu-desktop"]),
@@ -79,7 +82,7 @@ fn package_for(distro: &str, command: &str) -> Option<Vec<&'static str>> {
             _ => None,
         },
 
-        "debian" | "ubuntu" | "linuxmint" | "pop" => match command {
+        "apt" => match command {
             "git" => Some(vec!["git"]),
             "cargo" => Some(vec!["cargo", "rustc"]),
             "qemu-system-x86_64" => Some(vec!["qemu-system-x86"]),
@@ -94,7 +97,7 @@ fn package_for(distro: &str, command: &str) -> Option<Vec<&'static str>> {
             _ => None,
         },
 
-        "fedora" => match command {
+        "dnf" => match command {
             "git" => Some(vec!["git"]),
             "cargo" => Some(vec!["rust", "cargo"]),
             "qemu-system-x86_64" => Some(vec!["qemu-system-x86-core"]),
@@ -109,6 +112,79 @@ fn package_for(distro: &str, command: &str) -> Option<Vec<&'static str>> {
             _ => None,
         },
 
+        "zypper" => match command {
+            "git" => Some(vec!["git"]),
+            "cargo" => Some(vec!["rust", "cargo"]),
+            "qemu-system-x86_64" => Some(vec!["qemu-x86"]),
+            "make" => Some(vec!["make"]),
+            "ninja" => Some(vec!["ninja"]),
+            "python3" => Some(vec!["python3"]),
+            "dmg2img" => Some(vec!["dmg2img"]),
+            "curl" => Some(vec!["curl"]),
+            "pkg-config" => Some(vec!["pkg-config"]),
+            "meson" => Some(vec!["meson"]),
+            "gcc" => Some(vec!["gcc"]),
+            _ => None,
+        },
+
+        "apk" => match command {
+            "git" => Some(vec!["git"]),
+            "cargo" => Some(vec!["rust", "cargo"]),
+            "qemu-system-x86_64" => Some(vec!["qemu-system-x86_64"]),
+            "make" => Some(vec!["make"]),
+            "ninja" => Some(vec!["ninja"]),
+            "python3" => Some(vec!["python3"]),
+            "dmg2img" => Some(vec!["dmg2img"]),
+            "curl" => Some(vec!["curl"]),
+            "pkg-config" => Some(vec!["pkgconf"]),
+            "meson" => Some(vec!["meson"]),
+            "gcc" => Some(vec!["gcc"]),
+            _ => None,
+        },
+
+        "xbps" => match command {
+            "git" => Some(vec!["git"]),
+            "cargo" => Some(vec!["rust", "cargo"]),
+            "qemu-system-x86_64" => Some(vec!["qemu"]),
+            "make" => Some(vec!["base-devel"]),
+            "ninja" => Some(vec!["ninja"]),
+            "python3" => Some(vec!["python3"]),
+            "dmg2img" => Some(vec!["dmg2img"]),
+            "curl" => Some(vec!["curl"]),
+            "pkg-config" => Some(vec!["pkg-config"]),
+            "meson" => Some(vec!["meson"]),
+            "gcc" => Some(vec!["gcc"]),
+            _ => None,
+        },
+
+        "emerge" => match command {
+            "git" => Some(vec!["dev-vcs/git"]),
+            "cargo" => Some(vec!["dev-lang/rust"]),
+            "qemu-system-x86_64" => Some(vec!["app-emulation/qemu"]),
+            "make" => Some(vec!["sys-devel/make"]),
+            "ninja" => Some(vec!["dev-build/ninja"]),
+            "python3" => Some(vec!["dev-lang/python"]),
+            "dmg2img" => Some(vec!["app-misc/dmg2img"]),
+            "curl" => Some(vec!["net-misc/curl"]),
+            "pkg-config" => Some(vec!["dev-util/pkgconf"]),
+            "meson" => Some(vec!["dev-build/meson"]),
+            "gcc" => Some(vec!["sys-devel/gcc"]),
+            _ => None,
+        },
+
+        _ => None,
+    }
+}
+
+fn package_manager_command(package_manager: &str) -> Option<(&'static str, &'static [&'static str])> {
+    match package_manager {
+        "pacman" => Some(("pacman", &["-S", "--needed"])),
+        "apt" => Some(("apt-get", &["install", "-y"])),
+        "dnf" => Some(("dnf", &["install", "-y"])),
+        "zypper" => Some(("zypper", &["install", "-y"])),
+        "apk" => Some(("apk", &["add"])),
+        "xbps" => Some(("xbps-install", &["-y"])),
+        "emerge" => Some(("emerge",)),
         _ => None,
     }
 }
@@ -171,6 +247,12 @@ impl ReimsVgpuApp {
             self.check_dependencies();
         }
 
+        if self.package_manager == "Select package manager" {
+            self.dependencies_status =
+                "Select a package manager before installing tools.".to_string();
+            return;
+        }
+
         let missing_commands: Vec<String> = self
             .dependency_checks
             .iter()
@@ -183,22 +265,13 @@ impl ReimsVgpuApp {
             return;
         }
 
-        let distro = match distro_id() {
-            Some(distro) => distro,
-            None => {
-                self.dependencies_status =
-                    "Could not detect the Linux distribution.".to_string();
-                return;
-            }
-        };
-
         let mut packages = Vec::<String>::new();
 
         for command in &missing_commands {
-            let Some(package_names) = package_for(&distro, command) else {
+            let Some(package_names) = packages_for(&self.package_manager, command) else {
                 self.dependencies_status = format!(
-                    "No automatic package mapping is available for {} on {}.",
-                    command, distro
+                    "No package mapping for {} with {}.",
+                    command, self.package_manager
                 );
                 return;
             };
@@ -210,50 +283,37 @@ impl ReimsVgpuApp {
             }
         }
 
-        self.dependencies_status = format!(
-            "Installing {} package{}...",
-            packages.len(),
-            if packages.len() == 1 { "" } else { "s" }
-        );
-
-        let (program, prefix_args): (&str, Vec<&str>) = if command_exists("pkexec") {
-            ("pkexec", Vec::new())
-        } else if command_exists("sudo") {
-            ("sudo", vec!["-n"])
-        } else {
+        let Some((program, prefix_args)) = package_manager_command(&self.package_manager) else {
             self.dependencies_status =
-                "Neither pkexec nor sudo is available. Install the missing tools manually."
-                    .to_string();
+                "Unsupported package manager selection.".to_string();
             return;
         };
 
-        let mut command = Command::new(program);
-        command.args(&prefix_args);
-
-        match distro.as_str() {
-            "arch" | "manjaro" => {
-                command.arg("pacman").args(["-S", "--needed"]);
-            }
-
-            "debian" | "ubuntu" | "linuxmint" | "pop" => {
-                command.arg("apt-get").args(["install", "-y"]);
-            }
-
-            "fedora" => {
-                command.arg("dnf").args(["install", "-y"]);
-            }
-
-            _ => {
+        let (privilege_program, privilege_args): (&str, Vec<&str>) =
+            if command_exists("pkexec") {
+                ("pkexec", Vec::new())
+            } else if command_exists("sudo") {
+                ("sudo", Vec::new())
+            } else {
                 self.dependencies_status =
-                    format!("Automatic installation is not supported on {} yet.", distro);
+                    "Neither pkexec nor sudo is available. Install the tools manually."
+                        .to_string();
                 return;
-            }
-        }
+            };
 
-        command
-            .args(&packages)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+        self.dependencies_status = format!(
+            "Installing {} missing package{} with {}...",
+            packages.len(),
+            if packages.len() == 1 { "" } else { "s" },
+            self.package_manager
+        );
+
+        let mut command = Command::new(privilege_program);
+        command.args(&privilege_args);
+        command.arg(program);
+        command.args(prefix_args);
+        command.args(&packages);
+        command.stdout(Stdio::null()).stderr(Stdio::null());
 
         match command.spawn() {
             Ok(process) => {
