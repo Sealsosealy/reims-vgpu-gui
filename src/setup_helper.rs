@@ -163,15 +163,74 @@ fn packages_for(package_manager: &str, command: &str) -> Option<Vec<&'static str
     }
 }
 
+fn find_terminal() -> Option<&'static str> {
+    for terminal in [
+        "kitty",
+        "foot",
+        "alacritty",
+        "wezterm",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "xterm",
+    ] {
+        if command_exists(terminal) {
+            return Some(terminal);
+        }
+    }
+
+    None
+}
+
+fn terminal_shell_args(terminal: &str, command_line: &str) -> Vec<String> {
+    match terminal {
+        "kitty" => vec!["sh".to_string(), "-lc".to_string(), command_line.to_string()],
+        "foot" => vec!["sh".to_string(), "-c".to_string(), command_line.to_string()],
+        "alacritty" => vec!["-e".to_string(), "sh".to_string(), "-lc".to_string(), command_line.to_string()],
+        "wezterm" => vec![
+            "start".to_string(),
+            "--".to_string(),
+            "sh".to_string(),
+            "-lc".to_string(),
+            command_line.to_string(),
+        ],
+        "gnome-terminal" => vec![
+            "--".to_string(),
+            "sh".to_string(),
+            "-lc".to_string(),
+            command_line.to_string(),
+        ],
+        "konsole" => vec![
+            "-e".to_string(),
+            "sh".to_string(),
+            "-lc".to_string(),
+            command_line.to_string(),
+        ],
+        "xfce4-terminal" => vec![
+            "-e".to_string(),
+            "sh".to_string(),
+            "-lc".to_string(),
+            command_line.to_string(),
+        ],
+        "xterm" => vec![
+            "-e".to_string(),
+            "sh".to_string(),
+            "-lc".to_string(),
+            command_line.to_string(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 fn package_manager_command(package_manager: &str) -> Option<(&'static str, &'static [&'static str])> {
     match package_manager {
-        "pacman" => Some(("pacman", &["-S", "--needed", "--noconfirm"])),
-        "apt" => Some(("apt-get", &["install", "-y"])),
-        "dnf" => Some(("dnf", &["install", "-y"])),
-        "zypper" => Some(("zypper", &["--non-interactive", "install", "-y"])),
+        "pacman" => Some(("pacman", &["-S", "--needed"])),
+        "apt" => Some(("apt-get", &["install"])),
+        "dnf" => Some(("dnf", &["install"])),
+        "zypper" => Some(("zypper", &["install"])),
         "apk" => Some(("apk", &["add"])),
         "xbps" => Some(("xbps-install", &["-y"])),
-        "emerge" => Some(("emerge", &["--ask=n"])),
+        "emerge" => Some(("emerge", &["--ask"])),
         _ => None,
     }
 }
@@ -248,7 +307,8 @@ impl ReimsVgpuApp {
             .collect();
 
         if missing_commands.is_empty() {
-            self.dependencies_status = "All required tools are already installed.".to_string();
+            self.dependencies_status =
+                "All required tools are already installed.".to_string();
             return;
         }
 
@@ -270,7 +330,9 @@ impl ReimsVgpuApp {
             }
         }
 
-        let Some((program, prefix_args)) = package_manager_command(&self.package_manager) else {
+        let Some((program, prefix_args)) =
+            package_manager_command(&self.package_manager)
+        else {
             self.dependencies_status =
                 "Unsupported package manager selection.".to_string();
             return;
@@ -280,36 +342,64 @@ impl ReimsVgpuApp {
             if command_exists("pkexec") {
                 ("pkexec", Vec::new())
             } else if command_exists("sudo") {
-                ("sudo", vec!["-n"])
+                ("sudo", Vec::new())
             } else {
                 self.dependencies_status =
-                    "Neither pkexec nor sudo is available. Install the tools manually."
-                        .to_string();
+                    "Neither pkexec nor sudo is available.".to_string();
                 return;
             };
 
+        let terminal = match find_terminal() {
+            Some(terminal) => terminal,
+            None => {
+                self.dependencies_status =
+                    "No supported terminal emulator was found.".to_string();
+                return;
+            }
+        };
+
+        let mut command_line = String::new();
+        command_line.push_str(privilege_program);
+
+        for argument in privilege_args {
+            command_line.push(' ');
+            command_line.push_str(argument);
+        }
+
+        command_line.push(' ');
+        command_line.push_str(program);
+
+        for argument in prefix_args {
+            command_line.push(' ');
+            command_line.push_str(argument);
+        }
+
+        for package in &packages {
+            command_line.push(' ');
+            command_line.push_str(package);
+        }
+
         self.dependencies_status = format!(
-            "Installing {} missing package{} with {}...",
+            "Opened {} to install {} package{} with {}. Answer the package manager's prompt there.",
+            terminal,
             packages.len(),
             if packages.len() == 1 { "" } else { "s" },
             self.package_manager
         );
 
-        let mut command = Command::new(privilege_program);
-        command.args(&privilege_args);
-        command.arg(program);
-        command.args(prefix_args);
-        command.args(&packages);
-        command.stdout(Stdio::null()).stderr(Stdio::null());
+        let terminal_args = terminal_shell_args(terminal, &command_line);
 
-        match command.spawn() {
+        match Command::new(terminal)
+            .args(terminal_args)
+            .spawn()
+        {
             Ok(process) => {
                 self.dependency_install_process = Some(process);
             }
 
             Err(error) => {
                 self.dependencies_status =
-                    format!("Could not start dependency installer: {}", error);
+                    format!("Could not open {}: {}", terminal, error);
             }
         }
     }
