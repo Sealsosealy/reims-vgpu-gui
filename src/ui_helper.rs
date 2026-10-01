@@ -221,6 +221,38 @@ impl ReimsVgpuApp {
             ui.label("Check and install the tools required to build reims-vGPU.");
             ui.add_space(15.0);
 
+            ui.label("Package manager:");
+            egui::ComboBox::from_id_source("package_manager")
+                .selected_text(&self.package_manager)
+                .show_ui(ui, |ui| {
+                    for package_manager in [
+                        "pacman",
+                        "apt",
+                        "dnf",
+                        "zypper",
+                        "apk",
+                        "xbps",
+                        "emerge",
+                    ] {
+                        ui.selectable_value(
+                            &mut self.package_manager,
+                            package_manager.to_string(),
+                            package_manager,
+                        );
+                    }
+                });
+
+            ui.add_space(10.0);
+
+            if self.package_manager != "Select package manager" {
+                ui.label(format!(
+                    "The installer will use {} for missing tools.",
+                    self.package_manager
+                ));
+            }
+
+            ui.add_space(10.0);
+
             if !self.dependencies_checked {
                 if glass_action_button(ui, "Check Dependencies").clicked() {
                     self.check_dependencies();
@@ -238,7 +270,8 @@ impl ReimsVgpuApp {
 
                 if self.dependency_install_process.is_some() {
                     ui.label("Installing missing dependencies...");
-                } else if self.dependency_checks.iter().any(|dependency| !dependency.installed) {
+                } else if self.package_manager != "Select package manager"
+                    && self.dependency_checks.iter().any(|dependency| !dependency.installed) {
                     if glass_action_button(ui, "Install Missing Tools").clicked() {
                         self.install_missing_dependencies();
                     }
